@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="GoldMeridian.Mathematics.Iwakura/GoldMeridian.Mathematics.Iwakura.csproj" />
+  <Project Path="GoldMeridian.Mathematics/GoldMeridian.Mathematics.csproj" />
+</Solution>
