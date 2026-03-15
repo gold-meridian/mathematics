@@ -267,6 +267,8 @@ internal static class VectorEmitter
     {
         var t = spec.Scalar.Keyword;
 
+        // Handled by EmitVectorConstructors.
+        /*
         var parameters = string.Join(", ", LaneNames.Take(spec.Lanes).Select(n => $"{t} {n.ToLower()}"));
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
         w.WriteLine($"public {spec.Name}({parameters})");
@@ -282,11 +284,15 @@ internal static class VectorEmitter
             w.Outdent();
         }
         w.WriteLine("}");
+        */
 
+        // This guard isn't necessary now that we skip the above logic.
+        /*
         if (spec.Lanes <= 1)
         {
             return;
         }
+        */
 
         w.WriteLine();
 
@@ -325,7 +331,7 @@ internal static class VectorEmitter
             }
 
             var paramIndex = 0;
-            var parameters = partition.Select(size => $"{scalar}{size} v{paramIndex++}").ToList();
+            var parameters = partition.Select(size => $"{scalar}{(size == 1 ? "" : size)} v{paramIndex++}").ToList();
 
             w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
             w.WriteLine($"public {spec.Name}({string.Join(", ", parameters)})");
@@ -340,7 +346,10 @@ internal static class VectorEmitter
                 {
                     for (var i = 0; i < size; i++)
                     {
-                        w.WriteLine($"{LaneNames[lane]} = v{p}.{LaneNames[i]};");
+                        var expr = size == 1
+                            ? $"{LaneNames[lane]} = v{p};"
+                            : $"{LaneNames[lane]} = v{p}.{LaneNames[i]};";
+                        w.WriteLine(expr);
                         lane++;
                     }
 
@@ -486,7 +495,9 @@ internal static class VectorEmitter
         w.WriteLine("{");
         {
             w.Indent();
+
             w.WriteLine($"return obj is {spec.Name} other && Equals(other);");
+
             w.Outdent();
         }
         w.WriteLine("}");
@@ -498,7 +509,9 @@ internal static class VectorEmitter
         w.WriteLine("{");
         {
             w.Indent();
+
             w.WriteLine($"return HashCode.Combine({hashArgs});");
+
             w.Outdent();
         }
         w.WriteLine("}");
