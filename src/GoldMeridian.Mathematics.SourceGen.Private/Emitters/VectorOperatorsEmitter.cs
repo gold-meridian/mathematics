@@ -28,13 +28,6 @@ internal static class VectorOperatorsEmitter
         EmitBinary(w, "<<", ScalarCapabilities.LeftShift, spec, onlyOwningLeft: true);
         EmitBinary(w, ">>", ScalarCapabilities.RightShift, spec, onlyOwningLeft: true);
         EmitBinary(w, ">>>", ScalarCapabilities.UnsignedRightShift, spec, onlyOwningLeft: true);
-
-        // Handled in EmitEquatable for now.
-        /*
-        // Equality operators
-        EmitBinary(w, "==", ScalarCapabilities.Equality, spec, returnsBool: true);
-        EmitBinary(w, "!=", ScalarCapabilities.Inequality, spec, returnsBool: true);
-        */
     }
 
     private static void EmitUnary(
@@ -84,7 +77,6 @@ internal static class VectorOperatorsEmitter
         string op,
         ScalarCapabilities cap,
         VectorSpec spec,
-        bool returnsBool = false,
         bool onlyOwningLeft = false
     )
     {
@@ -96,7 +88,7 @@ internal static class VectorOperatorsEmitter
         var typeName = spec.Name;
         var lanes = spec.Lanes;
         var scalar = spec.Scalar.Keyword;
-        var returnType = returnsBool ? "bool" : typeName;
+        var returnType = typeName;
 
         // Vector op Vector
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
@@ -112,24 +104,14 @@ internal static class VectorOperatorsEmitter
                 w.WriteLine($"var va = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref a);");
                 w.WriteLine($"var vb = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref b);");
 
-                if (returnsBool)
-                {
-                    var comparisons = string.Join(" && ", Enumerable.Range(0, lanes).Select(i => $"va.GetElement({i}) {op} vb.GetElement({i})"));
-                    w.WriteLine($"return {comparisons};");
-                }
-                else
-                {
-                    w.WriteLine($"var vr = va {op} vb;");
-                    w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
-                }
+                w.WriteLine($"var vr = va {op} vb;");
+                w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
             }
             else
             {
-                var expr = returnsBool
-                    ? string.Join(" && ", LaneNames.Take(lanes).Select(n => $"a.{n} {op} b.{n}"))
-                    : string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
+                var expr = string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
 
-                w.WriteLine($"return {(returnsBool ? expr : $"new {typeName}({expr})")};");
+                w.WriteLine($"return new {typeName}({expr});");
             }
 
             w.Outdent();
@@ -138,10 +120,6 @@ internal static class VectorOperatorsEmitter
         w.WriteLine();
 
         // Vector op Scalar
-        if (returnsBool)
-        {
-            return;
-        }
 
         // TODO: For intrinsics, look into just creating the vectors with the
         //       the scalar value directly instead of spreading it over our
