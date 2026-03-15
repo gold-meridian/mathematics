@@ -61,6 +61,8 @@ public interface IBinaryFloatingPointIeee754Vector<TVector, TData> : IBinaryVect
 public interface IVectorComponent1<TVector, TData> : IVector<TVector, TData>
     where TVector : IVectorComponent1<TVector, TData>
 {
+    static abstract TVector UnitX { get; }
+
     ref TData X { get; }
 }
 
@@ -70,6 +72,8 @@ public interface IVectorComponent1<TVector, TData> : IVector<TVector, TData>
 public interface IVectorComponent2<TVector, TData> : IVectorComponent1<TVector, TData>
     where TVector : IVectorComponent2<TVector, TData>
 {
+    static abstract TVector UnitY { get; }
+
     ref TData Y { get; }
 }
 
@@ -79,6 +83,8 @@ public interface IVectorComponent2<TVector, TData> : IVectorComponent1<TVector, 
 public interface IVectorComponent3<TVector, TData> : IVectorComponent2<TVector, TData>
     where TVector : IVectorComponent3<TVector, TData>
 {
+    static abstract TVector UnitZ { get; }
+
     ref TData Z { get; }
 }
 
@@ -88,6 +94,8 @@ public interface IVectorComponent3<TVector, TData> : IVectorComponent2<TVector, 
 public interface IVectorComponent4<TVector, TData> : IVectorComponent3<TVector, TData>
     where TVector : IVectorComponent4<TVector, TData>
 {
+    static abstract TVector UnitW { get; }
+
     ref TData W { get; }
 }
 #endregion
