@@ -27,11 +27,28 @@ Contains primitive math types. Vectors and matrices are source-generated to ensu
     - [x] automatic conversion between scalar and 1-lane types,
     - [x] automatic conversion between applicable SIMD intrinsic vectors,
     - [x] padding to align to closest SIMD intrinsic size;
-  - [x] swizzling:
+  - [x] swizzling (mirrors HLSL):
     - [x] getters for all possible combinations,
     - [x] setters for combinations without repeat fields;
+  - [x] constructors (mirrors HLSL):
+    - [x] broadcasting (scalar -> all lanes),
+    - [x] mixing different dimensions (e.g. `float4(float x, float2 yz, float w)`, `float4(float3 xyz, float w)`);
   - [x] parity with `Vector2/3/4` operators;
-  - [x] parity with `Vector2/3/4` public properties;
+  - [x] parity with `Vector2/3/4` public properties:
+    - [ ] `AllBitsSet` (TODO),
+    - [x] `One` (also `True` for `bool`s),
+    - [x] `Zero` (also `False` for `bool`s),
+    - [x] `NegativeZero`,
+    - [x] `E`,
+    - [x] `NaN`,
+    - [x] `NegativeInfinity`,
+    - [x] `Pi`,
+    - [x] `PositiveInfinity`,
+    - [x] `Tau`,
+    - [x] `UnitX` (also `TrueX` for `bool`s),
+    - [x] `UnitY` (also `TrueY` for `bool`s),
+    - [x] `UnitZ` (also `TrueZ` for `bool`s),
+    - [x] `UnitW` (also `TrueW` for `bool`s);
   - [ ] parity with `Vector2/3/4` public methods (TODO).
 
 - [ ] Matrices:
