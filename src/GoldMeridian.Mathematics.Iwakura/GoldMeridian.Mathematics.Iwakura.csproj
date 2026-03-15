@@ -6,4 +6,8 @@
         <Nullable>enable</Nullable>
     </PropertyGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\GoldMeridian.Mathematics\GoldMeridian.Mathematics.csproj"/>
+    </ItemGroup>
+
 </Project>
