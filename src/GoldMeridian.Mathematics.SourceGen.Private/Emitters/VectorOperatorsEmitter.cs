@@ -13,7 +13,7 @@ internal static class VectorOperatorsEmitter
         // Unary operators
         EmitUnary(w, "-", ScalarCapabilities.Negate, spec);
         EmitUnary(w, "+", ScalarCapabilities.Plus, spec);
-        EmitUnary(w, "~", ScalarCapabilities.OnesComplement, spec);
+        EmitUnary(w, "~", ScalarCapabilities.OnesComplement, spec, bitwise: true);
 
         // Binary operators
         EmitBinary(w, "+", ScalarCapabilities.Add, spec);
@@ -41,7 +41,8 @@ internal static class VectorOperatorsEmitter
         CodeWriter w,
         string op,
         ScalarCapabilities cap,
-        VectorSpec spec
+        VectorSpec spec,
+        bool bitwise = false
     )
     {
         if (!spec.Scalar.Capabilities.HasFlag(cap))

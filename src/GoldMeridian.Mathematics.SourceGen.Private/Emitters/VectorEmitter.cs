@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using GoldMeridian.Mathematics.SourceGen.Specs;
 using GoldMeridian.Mathematics.SourceGen.Util;
@@ -25,6 +24,27 @@ internal static class VectorEmitter
         w.WriteLine();
         w.WriteLine("namespace GoldMeridian.Mathematics;");
         w.WriteLine();
+
+        if (spec.Scalar.SupportsIntrinsics)
+        {
+            var scalarBits = IntrinsicHelpers.ScalarBitSize(spec.Scalar.Keyword);
+            var lanes = spec.Lanes;
+
+            var neededBits = lanes * scalarBits;
+            var vectorWidth = int.MaxValue;
+            foreach (var v in intrinsic_sizes)
+            {
+                if (v.Bits >= neededBits && v.Bits < vectorWidth)
+                {
+                    vectorWidth = v.Bits;
+                }
+            }
+
+            var structSizeBytes = vectorWidth / 8;
+
+            w.WriteLine($"[StructLayout(LayoutKind.Sequential, Size = {structSizeBytes})]");
+        }
+
         w.WriteLine($"public partial struct {spec.Name} : IEquatable<{spec.Name}>");
         w.WriteLine("{");
         {
@@ -59,9 +79,38 @@ internal static class VectorEmitter
 
     private static void EmitFields(CodeWriter w, VectorSpec spec)
     {
-        foreach (var lane in LaneNames.Take(spec.Lanes))
+        var lanes = spec.Lanes;
+        var scalar = spec.Scalar.Keyword;
+
+        foreach (var lane in LaneNames.Take(lanes))
         {
-            w.WriteLine($"public {spec.Scalar.Keyword} {lane};");
+            w.WriteLine($"public {scalar} {lane};");
+        }
+
+        if (spec.Scalar.SupportsIntrinsics)
+        {
+            var scalarBits = IntrinsicHelpers.ScalarBitSize(spec.Scalar.Keyword);
+
+            var neededBits = lanes * scalarBits;
+            var vectorWidth = int.MaxValue;
+            foreach (var v in intrinsic_sizes)
+            {
+                if (v.Bits >= neededBits && v.Bits < vectorWidth)
+                {
+                    vectorWidth = v.Bits;
+                }
+            }
+
+            // May be larger than lanes -> pad
+            var totalLanes = vectorWidth / scalarBits;
+
+            if (totalLanes > lanes)
+            {
+                for (var i = lanes; i < totalLanes; i++)
+                {
+                    w.WriteLine($"private {scalar} pad{i - lanes}; // padding for SIMD alignment");
+                }
+            }
         }
 
         w.WriteLine();
@@ -301,7 +350,7 @@ internal static class VectorEmitter
         }
 
         var scalar = spec.Scalar.Keyword;
-        var scalarBits = ScalarBitSize(spec.Scalar.Keyword);
+        var scalarBits = IntrinsicHelpers.ScalarBitSize(spec.Scalar.Keyword);
         var lanes = spec.Lanes;
 
         foreach (var (vectorType, bits) in intrinsic_sizes)
@@ -332,23 +381,6 @@ internal static class VectorEmitter
 
             w.WriteLine();
         }
-
-        return;
-
-        static int ScalarBitSize(string keyword) => keyword switch
-        {
-            "float" => 32,
-            "double" => 64,
-            "int" => 32,
-            "uint" => 32,
-            "long" => 64,
-            "ulong" => 64,
-            "short" => 16,
-            "ushort" => 16,
-            "byte" => 8,
-            "sbyte" => 8,
-            _ => throw new NotSupportedException($"Unknown scalar type: {keyword}"),
-        };
     }
 
     private static void EmitEquatable(CodeWriter w, VectorSpec spec)
