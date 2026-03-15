@@ -25,9 +25,9 @@ internal static class VectorOperatorsEmitter
         EmitBinary(w, "|", ScalarCapabilities.BitwiseOr, spec);
         EmitBinary(w, "^", ScalarCapabilities.ExclusiveOr, spec);
 
-        EmitBinary(w, "<<", ScalarCapabilities.LeftShift, spec, onlyOwningLeft: true);
-        EmitBinary(w, ">>", ScalarCapabilities.RightShift, spec, onlyOwningLeft: true);
-        EmitBinary(w, ">>>", ScalarCapabilities.UnsignedRightShift, spec, onlyOwningLeft: true);
+        EmitBinary(w, "<<", ScalarCapabilities.LeftShift, spec, onlyOwningLeft: true, scalarRhs: true);
+        EmitBinary(w, ">>", ScalarCapabilities.RightShift, spec, onlyOwningLeft: true, scalarRhs: true);
+        EmitBinary(w, ">>>", ScalarCapabilities.UnsignedRightShift, spec, onlyOwningLeft: true, scalarRhs: true);
     }
 
     private static void EmitUnary(
@@ -77,7 +77,8 @@ internal static class VectorOperatorsEmitter
         string op,
         ScalarCapabilities cap,
         VectorSpec spec,
-        bool onlyOwningLeft = false
+        bool onlyOwningLeft = false,
+        bool scalarRhs = false
     )
     {
         if (!spec.Scalar.Capabilities.HasFlag(cap))
@@ -91,33 +92,36 @@ internal static class VectorOperatorsEmitter
         var returnType = typeName;
 
         // Vector op Vector
-        w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
-        w.WriteLine($"public static {returnType} operator {op}({typeName} a, {typeName} b)");
-        w.WriteLine("{");
+        if (!scalarRhs)
         {
-            w.Indent();
-
-            if (spec.Scalar.SupportsIntrinsics)
+            w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+            w.WriteLine($"public static {returnType} operator {op}({typeName} a, {typeName} b)");
+            w.WriteLine("{");
             {
-                var vecType = IntrinsicHelpers.GetIntrinsicVectorType(spec);
+                w.Indent();
 
-                w.WriteLine($"var va = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref a);");
-                w.WriteLine($"var vb = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref b);");
+                if (spec.Scalar.SupportsIntrinsics)
+                {
+                    var vecType = IntrinsicHelpers.GetIntrinsicVectorType(spec);
 
-                w.WriteLine($"var vr = va {op} vb;");
-                w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
+                    w.WriteLine($"var va = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref a);");
+                    w.WriteLine($"var vb = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref b);");
+
+                    w.WriteLine($"var vr = va {op} vb;");
+                    w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
+                }
+                else
+                {
+                    var expr = string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
+
+                    w.WriteLine($"return new {typeName}({expr});");
+                }
+
+                w.Outdent();
             }
-            else
-            {
-                var expr = string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
-
-                w.WriteLine($"return new {typeName}({expr});");
-            }
-
-            w.Outdent();
+            w.WriteLine("}");
+            w.WriteLine();
         }
-        w.WriteLine("}");
-        w.WriteLine();
 
         // Vector op Scalar
 
@@ -125,20 +129,28 @@ internal static class VectorOperatorsEmitter
         //       the scalar value directly instead of spreading it over our
         //       constructors.  Would probably be marginally faster...
 
+        var rhs = scalarRhs ? "int" : scalar;
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
-        w.WriteLine($"public static {typeName} operator {op}({typeName} a, {scalar} b)");
+        w.WriteLine($"public static {typeName} operator {op}({typeName} a, {rhs} b)");
         w.WriteLine("{");
         {
             w.Indent();
 
-            if (spec.Scalar.SupportsIntrinsics)
+            if (scalarRhs)
             {
-                w.WriteLine($"var bv = new {typeName}(b);");
-                w.WriteLine($"return a {op} bv;");
+                w.WriteLine($"return a {op} b;");
             }
             else
             {
-                w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b)"))});");
+                if (spec.Scalar.SupportsIntrinsics)
+                {
+                    w.WriteLine($"var bv = new {typeName}(b);");
+                    w.WriteLine($"return a {op} bv;");
+                }
+                else
+                {
+                    w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b)"))});");
+                }
             }
 
             w.Outdent();
@@ -153,19 +165,26 @@ internal static class VectorOperatorsEmitter
         }
 
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
-        w.WriteLine($"public static {typeName} operator {op}({scalar} a, {typeName} b)");
+        w.WriteLine($"public static {typeName} operator {op}({rhs} a, {typeName} b)");
         w.WriteLine("{");
         {
             w.Indent();
 
-            if (spec.Scalar.SupportsIntrinsics)
+            if (scalarRhs)
             {
-                w.WriteLine($"var av = new {typeName}(a);");
-                w.WriteLine($"return av {op} b;");
+                w.WriteLine($"return a {op} b;");
             }
             else
             {
-                w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a {op} b.{n})"))});");
+                if (spec.Scalar.SupportsIntrinsics)
+                {
+                    w.WriteLine($"var av = new {typeName}(a);");
+                    w.WriteLine($"return av {op} b;");
+                }
+                else
+                {
+                    w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a {op} b.{n})"))});");
+                }
             }
 
             w.Outdent();
