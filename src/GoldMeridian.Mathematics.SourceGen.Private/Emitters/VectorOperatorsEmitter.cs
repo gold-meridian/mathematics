@@ -50,12 +50,31 @@ internal static class VectorOperatorsEmitter
             return;
         }
 
+        var typeName = spec.Name;
+        var lanes = spec.Lanes;
+        var scalar = spec.Scalar.Keyword;
+
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
         w.WriteLine($"public static {spec.Name} operator {op}({spec.Name} v)");
         w.WriteLine("{");
-        w.Indent();
-        w.WriteLine($"return new {spec.Name}({string.Join(", ", LaneNames.Take(spec.Lanes).Select(n => $"({spec.Scalar.Keyword})({op}v.{n})"))});");
-        w.Outdent();
+        {
+            w.Indent();
+
+            if (spec.Scalar.SupportsIntrinsics && bitwise)
+            {
+                var vecType = IntrinsicHelpers.GetIntrinsicVectorType(spec);
+                w.WriteLine($"var vv = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref v);");
+                w.WriteLine($"var vr = {op}vv;");
+                w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
+            }
+            else
+            {
+                var expr = string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})({op}v.{n})"));
+                w.WriteLine($"return new {typeName}({expr});");
+            }
+
+            w.Outdent();
+        }
         w.WriteLine("}");
         w.WriteLine();
     }
@@ -86,11 +105,32 @@ internal static class VectorOperatorsEmitter
         {
             w.Indent();
 
-            var expr = returnsBool
-                ? string.Join(" && ", LaneNames.Take(lanes).Select(n => $"a.{n} {op} b.{n}"))
-                : string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
+            if (spec.Scalar.SupportsIntrinsics)
+            {
+                var vecType = IntrinsicHelpers.GetIntrinsicVectorType(spec);
 
-            w.WriteLine($"return {(returnsBool ? expr : $"new {typeName}({expr})")};");
+                w.WriteLine($"var va = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref a);");
+                w.WriteLine($"var vb = Unsafe.As<{typeName}, {vecType}<{scalar}>>(ref b);");
+
+                if (returnsBool)
+                {
+                    var comparisons = string.Join(" && ", Enumerable.Range(0, lanes).Select(i => $"va.GetElement({i}) {op} vb.GetElement({i})"));
+                    w.WriteLine($"return {comparisons};");
+                }
+                else
+                {
+                    w.WriteLine($"var vr = va {op} vb;");
+                    w.WriteLine($"return Unsafe.As<{vecType}<{scalar}>, {typeName}>(ref vr);");
+                }
+            }
+            else
+            {
+                var expr = returnsBool
+                    ? string.Join(" && ", LaneNames.Take(lanes).Select(n => $"a.{n} {op} b.{n}"))
+                    : string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b.{n})"));
+
+                w.WriteLine($"return {(returnsBool ? expr : $"new {typeName}({expr})")};");
+            }
 
             w.Outdent();
         }
@@ -103,13 +143,25 @@ internal static class VectorOperatorsEmitter
             return;
         }
 
+        // TODO: For intrinsics, look into just creating the vectors with the
+        //       the scalar value directly instead of spreading it over our
+        //       constructors.  Would probably be marginally faster...
+
         w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
         w.WriteLine($"public static {typeName} operator {op}({typeName} a, {scalar} b)");
         w.WriteLine("{");
         {
             w.Indent();
 
-            w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b)"))});");
+            if (spec.Scalar.SupportsIntrinsics)
+            {
+                w.WriteLine($"var bv = new {typeName}(b);");
+                w.WriteLine($"return a {op} bv;");
+            }
+            else
+            {
+                w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a.{n} {op} b)"))});");
+            }
 
             w.Outdent();
         }
@@ -128,7 +180,15 @@ internal static class VectorOperatorsEmitter
         {
             w.Indent();
 
-            w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a {op} b.{n})"))});");
+            if (spec.Scalar.SupportsIntrinsics)
+            {
+                w.WriteLine($"var av = new {typeName}(a);");
+                w.WriteLine($"return av {op} b;");
+            }
+            else
+            {
+                w.WriteLine($"return new {typeName}({string.Join(", ", LaneNames.Take(lanes).Select(n => $"({scalar})(a {op} b.{n})"))});");
+            }
 
             w.Outdent();
         }

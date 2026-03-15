@@ -32,7 +32,7 @@ internal static class VectorEmitter
 
             var neededBits = lanes * scalarBits;
             var vectorWidth = int.MaxValue;
-            foreach (var v in intrinsic_sizes)
+            foreach (var v in IntrinsicHelpers.IntrinsicSizes)
             {
                 if (v.Bits >= neededBits && v.Bits < vectorWidth)
                 {
@@ -93,7 +93,7 @@ internal static class VectorEmitter
 
             var neededBits = lanes * scalarBits;
             var vectorWidth = int.MaxValue;
-            foreach (var v in intrinsic_sizes)
+            foreach (var v in IntrinsicHelpers.IntrinsicSizes)
             {
                 if (v.Bits >= neededBits && v.Bits < vectorWidth)
                 {
@@ -334,14 +334,6 @@ internal static class VectorEmitter
         w.WriteLine();
     }
 
-    private static readonly (string Type, int Bits)[] intrinsic_sizes =
-    [
-        ("Vector64", 64),
-        ("Vector128", 128),
-        ("Vector256", 256),
-        ("Vector512", 512),
-    ];
-
     private static void EmitIntrinsicConversions(CodeWriter w, VectorSpec spec)
     {
         if (!spec.Scalar.SupportsIntrinsics)
@@ -353,7 +345,7 @@ internal static class VectorEmitter
         var scalarBits = IntrinsicHelpers.ScalarBitSize(spec.Scalar.Keyword);
         var lanes = spec.Lanes;
 
-        foreach (var (vectorType, bits) in intrinsic_sizes)
+        foreach (var (vectorType, bits) in IntrinsicHelpers.IntrinsicSizes)
         {
             var maxLanes = bits / scalarBits;
             if (lanes > maxLanes)
