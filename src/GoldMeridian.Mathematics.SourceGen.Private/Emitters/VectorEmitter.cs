@@ -25,7 +25,7 @@ internal static class VectorEmitter
         w.WriteLine();
         w.WriteLine("namespace GoldMeridian.Mathematics;");
         w.WriteLine();
-        w.WriteLine($"public partial struct {spec.Name}");
+        w.WriteLine($"public partial struct {spec.Name} : IEquatable<{spec.Name}>");
         w.WriteLine("{");
         {
             w.Indent();
@@ -37,6 +37,14 @@ internal static class VectorEmitter
             EmitScalarConversions(w, spec);
             EmitDotnetVectorConversions(w, spec);
             EmitIntrinsicConversions(w, spec);
+
+            EmitEquatable(w, spec);
+
+            w.WriteLine("#region Operators", skipIndent: true);
+            VectorOperatorsEmitter.Emit(w, spec);
+            w.WriteLine("#endregion", skipIndent: true);
+
+            w.WriteLine();
 
             w.WriteLine("#region Swizzles", skipIndent: true);
             SwizzleEmitter.Emit(w, spec);
@@ -341,5 +349,52 @@ internal static class VectorEmitter
             "sbyte" => 8,
             _ => throw new NotSupportedException($"Unknown scalar type: {keyword}"),
         };
+    }
+
+    private static void EmitEquatable(CodeWriter w, VectorSpec spec)
+    {
+        w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        w.WriteLine($"public bool Equals({spec.Name} other)");
+        w.WriteLine("{");
+        {
+            w.Indent();
+
+            var comparisons = string.Join(" && ", LaneNames.Take(spec.Lanes).Select(x => $"{x} == other.{x}"));
+            w.WriteLine($"return {comparisons};");
+
+            w.Outdent();
+        }
+        w.WriteLine("}");
+        w.WriteLine();
+
+        w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        w.WriteLine("public override bool Equals(object obj)");
+        w.WriteLine("{");
+        {
+            w.Indent();
+            w.WriteLine($"return obj is {spec.Name} other && Equals(other);");
+            w.Outdent();
+        }
+        w.WriteLine("}");
+        w.WriteLine();
+
+        // TODO: Look into more optimized cases for common vectors.
+        var hashArgs = string.Join(", ", LaneNames.Take(spec.Lanes));
+        w.WriteLine("public override int GetHashCode()");
+        w.WriteLine("{");
+        {
+            w.Indent();
+            w.WriteLine($"return HashCode.Combine({hashArgs});");
+            w.Outdent();
+        }
+        w.WriteLine("}");
+        w.WriteLine();
+
+        w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        w.WriteLine($"public static bool operator ==({spec.Name} a, {spec.Name} b) => a.Equals(b);");
+
+        w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+        w.WriteLine($"public static bool operator !=({spec.Name} a, {spec.Name} b) => !a.Equals(b);");
+        w.WriteLine();
     }
 }

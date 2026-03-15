@@ -10,17 +10,17 @@ internal static class TypeSpecs
     //       (U)Int24.
     public static ScalarSpec[] Scalars { get; } =
     [
-        new("float", "float", true),
-        new("double", "double", true),
-        new("int", "int", true),
-        new("uint", "uint", true),
-        new("long", "long", true),
-        new("ulong", "ulong", true),
-        new("short", "short", true),
-        new("ushort", "ushort", true),
-        new("byte", "byte", true),
-        new("sbyte", "sbyte", true),
-        new("bool", "bool", false),
+        new("float", "float", IsInteger: false, IsSigned: true, IsFloatingPoint: true, SupportsIntrinsics: true),
+        new("double", "double", IsInteger: false, IsSigned: true, IsFloatingPoint: true, SupportsIntrinsics: true),
+        new("int", "int", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("uint", "uint", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("long", "long", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("ulong", "ulong", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("short", "short", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("ushort", "ushort", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("sbyte", "sbyte", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("byte", "byte", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
+        new("bool", "bool", IsInteger: false, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: false),
     ];
 
     public static VectorSpec[] Vectors { get; } = MakeVectors().ToArray();
