@@ -50,6 +50,7 @@ internal static class VectorEmitter
         {
             w.Indent();
 
+            EmitPublicProperties(w, spec);
             EmitFields(w, spec);
             EmitIndexer(w, spec);
             EmitConstructors(w, spec);
@@ -75,6 +76,95 @@ internal static class VectorEmitter
         w.WriteLine("}");
 
         return w.ToString();
+    }
+
+    private static void EmitPublicProperties(CodeWriter w, VectorSpec spec)
+    {
+        var t = spec.Scalar.Keyword;
+        var lanes = spec.Lanes;
+
+        if (spec.Scalar.SupportsArithmetic)
+        {
+            w.WriteLine($"public static {spec.Name} One => new({string.Join(", ", Enumerable.Repeat("1", lanes))});");
+
+            w.WriteLine($"public static {spec.Name} Zero => new({string.Join(", ", Enumerable.Repeat("0", lanes))});");
+
+            if (spec.Scalar.IsSigned || spec.Scalar.IsFloatingPoint)
+            {
+                w.WriteLine($"public static {spec.Name} NegativeZero => new({string.Join(", ", Enumerable.Repeat("-0", lanes))});");
+            }
+
+            if (spec.Scalar.IsFloatingPoint)
+            {
+                w.WriteLine($"public static {spec.Name} E => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.Epsilon", lanes))});");
+
+                w.WriteLine($"public static {spec.Name} NaN => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.NaN", lanes))});");
+
+                w.WriteLine($"public static {spec.Name} NegativeInfinity => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.NegativeInfinity", lanes))});");
+
+                w.WriteLine($"public static {spec.Name} Pi => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.Pi", lanes))});");
+
+                w.WriteLine($"public static {spec.Name} PositiveInfinity => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.PositiveInfinity", lanes))});");
+
+                w.WriteLine($"public static {spec.Name} Tau => new({string.Join(", ", Enumerable.Repeat($"{spec.Scalar.Keyword}.Tau", lanes))});");
+            }
+
+            if (lanes >= 1)
+            {
+                w.WriteLine($"public static {spec.Name} UnitX => new(1{(lanes > 1 ? ", " + string.Join(", ", Enumerable.Repeat("0", lanes - 1)) : "")});");
+            }
+
+            if (lanes >= 2)
+            {
+                w.WriteLine($"public static {spec.Name} UnitY => new(0, 1, {string.Join(", ", Enumerable.Repeat("0", lanes - 2))});");
+            }
+
+            if (lanes >= 3)
+            {
+                w.WriteLine($"public static {spec.Name} UnitZ => new(0, 0, 1, {string.Join(", ", Enumerable.Repeat("0", lanes - 3))});");
+            }
+
+            if (lanes >= 4)
+            {
+                w.WriteLine($"public static {spec.Name} UnitW => new(0, 0, 0, 1);");
+            }
+        }
+
+        // Special support for booleans because they're dumb and unique.
+        if (t == "bool")
+        {
+            if (lanes >= 1)
+            {
+                w.WriteLine($"public static {spec.Name} UnitX => new(true{(lanes > 1 ? ", " + string.Join(", ", Enumerable.Repeat("false", lanes - 1)) : "")});");
+                w.WriteLine($"public static {spec.Name} TrueX => UnitX;");
+            }
+
+            if (lanes >= 2)
+            {
+                w.WriteLine($"public static {spec.Name} UnitY => new(false, true, {string.Join(", ", Enumerable.Repeat("false", lanes - 2))});");
+                w.WriteLine($"public static {spec.Name} TrueY => UnitY;");
+            }
+
+            if (lanes >= 3)
+            {
+                w.WriteLine($"public static {spec.Name} UnitZ => new(false, false, true, {string.Join(", ", Enumerable.Repeat("false", lanes - 3))});");
+                w.WriteLine($"public static {spec.Name} TrueZ => UnitZ;");
+            }
+
+            if (lanes >= 4)
+            {
+                w.WriteLine($"public static {spec.Name} UnitW => new(false, false, false, true);");
+                w.WriteLine($"public static {spec.Name} TrueW => UnitW;");
+            }
+
+            w.WriteLine($"public static {spec.Name} One => new({string.Join(", ", Enumerable.Repeat("true", lanes))});");
+            w.WriteLine($"public static {spec.Name} True => One;");
+
+            w.WriteLine($"public static {spec.Name} Zero => new({string.Join(", ", Enumerable.Repeat("false", lanes))});");
+            w.WriteLine($"public static {spec.Name} False => Zero;");
+        }
+
+        w.WriteLine();
     }
 
     private static void EmitFields(CodeWriter w, VectorSpec spec)
