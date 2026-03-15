@@ -1,6 +1,8 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using GoldMeridian.Mathematics.SourceGen.Emitters;
+using GoldMeridian.Mathematics.SourceGen.Specs;
+using Microsoft.CodeAnalysis;
 
-namespace GoldMeridian.Mathematics.SourceGen.Generators;
+namespace GoldMeridian.Mathematics.SourceGen;
 
 [Generator]
 public sealed class MathGenerator : IIncrementalGenerator
@@ -13,7 +15,7 @@ public sealed class MathGenerator : IIncrementalGenerator
                 foreach (var vector in TypeSpecs.Vectors)
                 {
                     ctx.AddSource(
-                        $"{vector.TypeName}.vector.g.cs",
+                        $"{vector.Name}.g.cs",
                         VectorEmitter.Generate(vector)
                     );
                 }
