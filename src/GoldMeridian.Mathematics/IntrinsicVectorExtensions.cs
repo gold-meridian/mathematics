@@ -9,5 +9,4 @@ namespace GoldMeridian.Mathematics;
 /// </summary>
 public static class IntrinsicVectorExtensions
 {
-    
 }
