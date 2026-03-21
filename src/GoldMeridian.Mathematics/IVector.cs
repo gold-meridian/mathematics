@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace GoldMeridian.Mathematics;
 
@@ -33,6 +34,10 @@ namespace GoldMeridian.Mathematics;
  * (unfortunate and slow).  We can't parallelize lane conversion because we
  * always just get bitmasked vectors, which we're explicitly trying to convert
  * from.
+ *
+ * Memory layout contract:
+ * - all generated vector types must be sequential (StructLayout.Sequential);
+ * - fields are laid out contiguously in component order (X, Y, Z, W).
  */
 
 /// <summary>
@@ -71,13 +76,23 @@ public interface IVector<TVector, TScalar> : IEquatable<TVector>,
     ///     <br />
     ///     Must contain at least <see cref="Lanes"/> elements.
     /// </summary>
-    static abstract TVector Create(ReadOnlySpan<TScalar> values);
-#endregion
+    static virtual TVector Create(ReadOnlySpan<TScalar> values)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(values.Length, TVector.Lanes);
+        return Unsafe.ReadUnaligned<TVector>(ref Unsafe.As<TScalar, byte>(ref MemoryMarshal.GetReference(values)));
+    }
 
-#region Span interop
-    void CopyTo(Span<TScalar> destination);
+    /// <summary>
+    ///     Creates a vector with X set to <paramref name="x"/> and all other
+    ///     components zero.
+    /// </summary>
+    static abstract TVector CreateScalar(TScalar x);
 
-    bool TryCopyTo(Span<TScalar> destination);
+    /// <summary>
+    ///     Creates a vector with X set to <paramref name="x"/> and all other
+    ///     components uninitialized.
+    /// </summary>
+    static abstract TVector CreateScalarUnsafe(TScalar x);
 #endregion
 }
 
@@ -143,6 +158,48 @@ public interface INumberVector<TVector, TScalar> : IVector<TVector, TScalar>,
     static virtual TVector operator %(TVector left, TScalar right)
     {
         return left % TVector.Create(right);
+    }
+#endregion
+
+#region Named operator aliases
+    static virtual TVector Add(TVector left, TVector right)
+    {
+        return left + right;
+    }
+
+    static virtual TVector Subtract(TVector left, TVector right)
+    {
+        return left - right;
+    }
+
+    static virtual TVector Multiply(TVector left, TVector right)
+    {
+        return left * right;
+    }
+
+    static virtual TVector Multiply(TVector left, TScalar right)
+    {
+        return left * right;
+    }
+
+    static virtual TVector Multiply(TScalar left, TVector right)
+    {
+        return left * right;
+    }
+
+    static virtual TVector Divide(TVector left, TVector right)
+    {
+        return left / right;
+    }
+
+    static virtual TVector Divide(TVector left, TScalar right)
+    {
+        return left / right;
+    }
+
+    static virtual TVector Negate(TVector value)
+    {
+        return -value;
     }
 #endregion
 
@@ -446,7 +503,9 @@ public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVe
     static abstract TVector FusedMultiplyAdd(TVector left, TVector right, TVector addend);
 
     // INumerBase<TSelf>
-    // static abstract TVector MultiplyAddEstimate(TVector left, TVector right, TVector addend);
+#if NET8_0
+    static abstract TVector MultiplyAddEstimate(TVector left, TVector right, TVector addend);
+#endif
 
     // INumerBase<TSelf>
     // static abstract TVector MaxMagnitude(TVector left, TVector right);
@@ -631,9 +690,15 @@ public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVe
     static abstract TVector Normalize(TVector value);
 
     /// <summary>
-    ///     Reflect an incident vector off a surface with the given normal.
+    ///     Returns the reflection of a vector off a surface that has the
+    ///     specified normal.
     /// </summary>
-    static abstract TVector Reflect(TVector incident, TVector normal);
+    static virtual TVector Reflect(TVector incident, TVector normal)
+    {
+        var tmp = TVector.Create(TVector.Dot(incident, normal));
+        tmp += tmp;
+        return TVector.MultiplyAddEstimate(-tmp, normal, incident);
+    }
 #endregion
 
 #region Interpolation
@@ -739,6 +804,23 @@ public interface IVector1<TVector, TScalar> : IVector<TVector, TScalar>,
     where TScalar : IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 1;
+
+    new static abstract TVector Create(TScalar x);
+
+    static TVector IVector<TVector, TScalar>.Create(TScalar value)
+    {
+        return TVector.Create(value);
+    }
+
+    static TVector IVector<TVector, TScalar>.CreateScalar(TScalar x)
+    {
+        return TVector.Create(x);
+    }
+
+    static TVector IVector<TVector, TScalar>.CreateScalarUnsafe(TScalar x)
+    {
+        return TVector.CreateScalarUnsafe(x);
+    }
 }
 
 public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
@@ -747,6 +829,20 @@ public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
     where TScalar : IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 2;
+
+    static abstract TVector Create(TScalar x, TScalar y);
+
+    static TVector IVector<TVector, TScalar>.CreateScalar(TScalar x)
+    {
+        return TVector.Create(x, default(TScalar)!);
+    }
+
+    static TVector IVector<TVector, TScalar>.CreateScalarUnsafe(TScalar x)
+    {
+        Unsafe.SkipInit(out TVector value);
+        value.X = x;
+        return value;
+    }
 }
 
 public interface IVector3<TVector, TScalar> : IVector<TVector, TScalar>,
@@ -755,6 +851,20 @@ public interface IVector3<TVector, TScalar> : IVector<TVector, TScalar>,
     where TScalar : IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 3;
+
+    static abstract TVector Create(TScalar x, TScalar y, TScalar z);
+
+    static TVector IVector<TVector, TScalar>.CreateScalar(TScalar x)
+    {
+        return TVector.Create(x, default(TScalar)!, default(TScalar)!);
+    }
+
+    static TVector IVector<TVector, TScalar>.CreateScalarUnsafe(TScalar x)
+    {
+        Unsafe.SkipInit(out TVector value);
+        value.X = x;
+        return value;
+    }
 }
 
 public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
@@ -763,6 +873,20 @@ public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
     where TScalar : IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 4;
+
+    static abstract TVector Create(TScalar x, TScalar y, TScalar z, TScalar w);
+
+    static TVector IVector<TVector, TScalar>.CreateScalar(TScalar x)
+    {
+        return TVector.Create(x, default(TScalar)!, default(TScalar)!, default(TScalar)!);
+    }
+
+    static TVector IVector<TVector, TScalar>.CreateScalarUnsafe(TScalar x)
+    {
+        Unsafe.SkipInit(out TVector value);
+        value.X = x;
+        return value;
+    }
 }
 
 /// <summary>
