@@ -17,6 +17,22 @@ namespace GoldMeridian.Mathematics;
  * - shifts on floats are included but mirror Vector2/3/4 <<, >>, and >>>
  *   operators (which delegate to Vector128<float>, etc.).  These are the SIMD
  *   semantics, not arithmetic shift semantics.
+ *
+ * Boolean vectors:
+ * - bool1/2/3/4 use packed 8-bit C# booleans;
+ * - they are not layout-compatible with standard float/int vectors of the same
+ *   dimension due to not being 32-bit booleans (duh), so we can't use
+ *   Unsafe.BitCast for zero-cost conversions (we can't use this in general due
+ *   to the differences in sizes);
+ * - classification methods on IFloatingPointVector take on two forms:
+ *   - IsNan(TVector): TVector -> (scalar bitmask, mirrors Vector2/3/4),
+ *   - IsNanMask(Vector): TBoolVector -> (component-wise, concrete impl).
+ * The *Mask variants are abstract because there is no general zero-cost way to
+ * convert a scalar bitmask to a packed bool vector (see earlier comments).
+ * Concrete generated types implement them with explicit per-component checks
+ * (unfortunate and slow).  We can't parallelize lane conversion because we
+ * always just get bitmasked vectors, which we're explicitly trying to convert
+ * from.
  */
 
 /// <summary>
@@ -241,14 +257,14 @@ public interface INumberVector<TVector, TScalar> : IVector<TVector, TScalar>,
 
     static abstract bool None(TVector vector, TScalar value);
 
-    // Bitwise equality
+    // Bitwise all-bits-set
     static abstract bool AllWhereAllBitsSet(TVector vector);
 
     static abstract bool AnyWhereAllBitsSet(TVector vector);
 
     static abstract bool NoneWhereAllBitsSet(TVector vector);
 
-    // Index logic
+    // Index / count
     static abstract int Count(TVector vector, TScalar value);
 
     static abstract int CountWhereAllBitsSet(TVector vector);
@@ -352,8 +368,8 @@ public interface IUnsignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector
 ///     <br />
 ///     E.g. for <see cref="float2"/> this is <see cref="bool2"/>.
 /// </typeparam>
-public interface IFloatingPointVector<TVector, TScalar, out TBoolVector> : ISignedVector<TVector, TScalar>,
-                                                                           IFloatingPointConstants<TVector>
+public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVector<TVector, TScalar>,
+                                                                       IFloatingPointConstants<TVector>
     where TVector : struct, IFloatingPointVector<TVector, TScalar, TBoolVector>
     where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
     where TBoolVector : struct, IBoolVector<TBoolVector>
@@ -542,72 +558,36 @@ public interface IFloatingPointVector<TVector, TScalar, out TBoolVector> : ISign
 #endregion
 
 #region Typed classification (bool-mask returning)
-    // TODO: BitCast isn't okay for this.
+    // There is no general, zero-cost conversion to boolean vectors since they
+    // come in different sizes.  Concrete generated types implement each as an
+    // explicit per-component check (slow!):
+    //   static bool2 IsNaNMask(float2 v) => new (float.IsNaN(v.X), float.IsNaN(v.Y));
 
-    static virtual TBoolVector IsNaNMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsNaN(value));
-    }
+    static abstract TBoolVector IsNaNMask(TVector value);
 
-    static virtual TBoolVector IsInfinityMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsInfinity(value));
-    }
+    static abstract TBoolVector IsInfinityMask(TVector value);
 
-    static virtual TBoolVector IsFiniteMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsFinite(value));
-    }
+    static abstract TBoolVector IsFiniteMask(TVector value);
 
-    static virtual TBoolVector IsNegativeMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsNegative(value));
-    }
+    static abstract TBoolVector IsNegativeMask(TVector value);
 
-    static virtual TBoolVector IsPositiveMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsPositive(value));
-    }
+    static abstract TBoolVector IsPositiveMask(TVector value);
 
-    static virtual TBoolVector IsZeroMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsZero(value));
-    }
+    static abstract TBoolVector IsZeroMask(TVector value);
 
-    static virtual TBoolVector IsPositiveInfinityMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsPositiveInfinity(value));
-    }
+    static abstract TBoolVector IsPositiveInfinityMask(TVector value);
 
-    static virtual TBoolVector IsNegativeInfinityMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsNegativeInfinity(value));
-    }
+    static abstract TBoolVector IsNegativeInfinityMask(TVector value);
 
-    static virtual TBoolVector IsNormalMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsNormal(value));
-    }
+    static abstract TBoolVector IsNormalMask(TVector value);
 
-    static virtual TBoolVector IsSubnormalMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsSubnormal(value));
-    }
+    static abstract TBoolVector IsSubnormalMask(TVector value);
 
-    static virtual TBoolVector IsIntegerMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsInteger(value));
-    }
+    static abstract TBoolVector IsIntegerMask(TVector value);
 
-    static virtual TBoolVector IsEvenIntegerMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsEvenInteger(value));
-    }
+    static abstract TBoolVector IsEvenIntegerMask(TVector value);
 
-    static virtual TBoolVector IsOddIntegerMask(TVector value)
-    {
-        return Unsafe.BitCast<TVector, TBoolVector>(TVector.IsOddInteger(value));
-    }
+    static abstract TBoolVector IsOddIntegerMask(TVector value);
 #endregion
 
 #region Geometric
@@ -657,12 +637,12 @@ public interface IFloatingPointVector<TVector, TScalar, out TBoolVector> : ISign
 #endregion
 
 #region Interpolation
+    static abstract TVector Lerp(TVector a, TVector b, TVector t);
+
     static virtual TVector Lerp(TVector a, TVector b, TScalar t)
     {
         return TVector.Lerp(a, b, TVector.Create(t));
     }
-
-    static abstract TVector Lerp(TVector a, TVector b, TVector t);
 #endregion
 
     /// <summary>
@@ -673,6 +653,13 @@ public interface IFloatingPointVector<TVector, TScalar, out TBoolVector> : ISign
     ///     Mirrors <see cref="Vector2.ConditionalSelect"/>.
     /// </summary>
     static abstract TVector ConditionalSelect(TVector condition, TVector left, TVector right);
+
+    /// <summary>
+    ///     Selects components using a packed bool vector as the condition.
+    ///     <br />
+    ///     Concrete types implement the bool-to-mask expansion internally.
+    /// </summary>
+    static abstract TVector ConditionalSelect(TBoolVector condition, TVector left, TVector right);
 
 #region Instance methods
     TScalar Length();
@@ -781,8 +768,8 @@ public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
 /// <summary>
 ///     2-component floating-point vector.  Adds 2D <see cref="Cross"/> and
 ///     <see cref="Shuffle"/>.</summary>
-public interface IFloatingPointVector2<TVector, TScalar, out TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
-                                                                            IVector2<TVector, TScalar>
+public interface IFloatingPointVector2<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
+                                                                        IVector2<TVector, TScalar>
     where TVector : struct, IFloatingPointVector2<TVector, TScalar, TBoolVector>
     where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
     where TBoolVector : struct, IBoolVector<TBoolVector>
@@ -804,8 +791,8 @@ public interface IFloatingPointVector2<TVector, TScalar, out TBoolVector> : IFlo
 ///     3-component floating-point vector.  Adds 3D <see cref="Cross"/> and
 ///     <see cref="Shuffle"/>.
 /// </summary>
-public interface IFloatingPointVector3<TVector, TScalar, out TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
-                                                                            IVector3<TVector, TScalar>
+public interface IFloatingPointVector3<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
+                                                                        IVector3<TVector, TScalar>
     where TVector : struct, IFloatingPointVector3<TVector, TScalar, TBoolVector>
     where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
     where TBoolVector : struct, IBoolVector<TBoolVector>
@@ -824,8 +811,8 @@ public interface IFloatingPointVector3<TVector, TScalar, out TBoolVector> : IFlo
 /// <summary>
 ///     4-component floating-point vector.  Adds <see cref="Shuffle"/>.
 /// </summary>
-public interface IFloatingPointVector4<TVector, TScalar, out TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
-                                                                            IVector4<TVector, TScalar>
+public interface IFloatingPointVector4<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
+                                                                        IVector4<TVector, TScalar>
     where TVector : struct, IFloatingPointVector4<TVector, TScalar, TBoolVector>
     where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
     where TBoolVector : struct, IBoolVector<TBoolVector>
