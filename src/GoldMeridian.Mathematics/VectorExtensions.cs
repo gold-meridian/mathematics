@@ -18,6 +18,10 @@ namespace GoldMeridian.Mathematics;
 /// </summary>
 public static class VectorExtensions
 {
+    // TODO: How necessary is `this ref` in each extension?  `this in` may be
+    //       generally preferred but isn't allowed with generics (same for
+    //       `this ref readonly`).
+    
     /// <summary>
     ///     Gets the element at <paramref name="index"/>.
     /// </summary>
@@ -46,7 +50,7 @@ public static class VectorExtensions
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static TVector WithElement<TVector, TScalar>(
-        this TVector vector,
+        this ref TVector vector,
         int index,
         TScalar value
     )
