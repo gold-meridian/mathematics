@@ -56,6 +56,13 @@ public interface IVector<TVector, TScalar> : IEquatable<TVector>,
     static abstract int Lanes { get; }
 
     /// <summary>
+    ///     The required memory alignment in bytes for aligned load/store
+    ///     operations.  Matches the smallest SIMD vector boundary that fits
+    ///     this type.
+    /// </summary>
+    static abstract int Alignment { get; }
+
+    /// <summary>
     ///     All components zero (or false for bool vectors).
     /// </summary>
     static abstract TVector Zero { get; }
@@ -94,6 +101,8 @@ public interface IVector<TVector, TScalar> : IEquatable<TVector>,
     /// </summary>
     static abstract TVector CreateScalarUnsafe(TScalar x);
 #endregion
+
+    static abstract ref TScalar GetReference(in TVector v);
 }
 
 /// <summary>
@@ -421,30 +430,30 @@ public interface IUnsignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector
 /// <typeparam name="TScalar"></typeparam>
 /// <typeparam name="TBoolVector">
 ///     The same-size boolean vector type.  Used as the typed return of
-///     <c>*Mask</c> classification methods and <see cref="ConditionalSelect"/>.
+///     <c>*Mask</c> classification methods and
+///     <see cref="ConditionalSelect(TVector, TVector, TVector)"/>/<see cref="ConditionalSelect(TBoolVector, TVector, TVector)"/>.
 ///     <br />
 ///     E.g. for <see cref="float2"/> this is <see cref="bool2"/>.
 /// </typeparam>
-public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVector<TVector, TScalar>,
-                                                                       IFloatingPointConstants<TVector>
+public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVector<TVector, TScalar>
     where TVector : struct, IFloatingPointVector<TVector, TScalar, TBoolVector>
     where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
     where TBoolVector : struct, IBoolVector<TBoolVector>
 {
 #region IFloatingPointConstants defaults
-    static TVector IFloatingPointConstants<TVector>.E
+    static virtual TVector E
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TVector.Create(TScalar.E);
     }
 
-    static TVector IFloatingPointConstants<TVector>.Pi
+    static virtual TVector Pi
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TVector.Create(TScalar.Pi);
     }
 
-    static TVector IFloatingPointConstants<TVector>.Tau
+    static virtual TVector Tau
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => TVector.Create(TScalar.Tau);
@@ -477,7 +486,14 @@ public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVe
 
 #region Component-wise float math
     // Exponential
+
     static abstract TVector Sqrt(TVector value);
+
+    // Sqrt is a more recognized name, but Vector2/3/4 use SquareRoot.
+    static virtual TVector SquareRoot(TVector value)
+    {
+        return TVector.Sqrt(value);
+    }
 
     static abstract TVector Hypot(TVector x, TVector y);
 
@@ -502,118 +518,46 @@ public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVe
 
     static abstract TVector FusedMultiplyAdd(TVector left, TVector right, TVector addend);
 
-    // INumerBase<TSelf>
-#if NET8_0
     static abstract TVector MultiplyAddEstimate(TVector left, TVector right, TVector addend);
-#endif
 
-    // INumerBase<TSelf>
-    // static abstract TVector MaxMagnitude(TVector left, TVector right);
+    static abstract TVector MaxMagnitude(TVector left, TVector right);
 
-    // INumerBase<TSelf>
-    // static abstract TVector MinMagnitude(TVector left, TVector right);
+    static abstract TVector MinMagnitude(TVector left, TVector right);
 
-    // INumerBase<TSelf>
-    // static abstract TVector MaxMagnitudeNumber(TVector left, TVector right);
+    static abstract TVector MaxMagnitudeNumber(TVector left, TVector right);
 
-    // INumerBase<TSelf>
-    // static abstract TVector MinMagnitudeNumber(TVector left, TVector right);
+    static abstract TVector MinMagnitudeNumber(TVector left, TVector right);
 
     static abstract TVector MaxNative(TVector left, TVector right);
 
     static abstract TVector MinNative(TVector left, TVector right);
 
 #region Classification (TVector bitmask-returning)
-    new static abstract TVector IsNaN(TVector value);
+    static abstract TVector IsNaN(TVector value);
 
-    static bool INumberBase<TVector>.IsNaN(TVector value)
-    {
-        return TBoolVector.All(TVector.IsNaNMask(value));
-    }
+    static abstract TVector IsInfinity(TVector value);
 
-    new static abstract TVector IsInfinity(TVector value);
+    static abstract TVector IsFinite(TVector value);
 
-    static bool INumberBase<TVector>.IsInfinity(TVector value)
-    {
-        return TBoolVector.All(TVector.IsInfinityMask(value));
-    }
+    static abstract TVector IsNegative(TVector value);
 
-    new static abstract TVector IsFinite(TVector value);
+    static abstract TVector IsPositive(TVector value);
 
-    static bool INumberBase<TVector>.IsFinite(TVector value)
-    {
-        return TBoolVector.All(TVector.IsFiniteMask(value));
-    }
+    static abstract TVector IsZero(TVector value);
 
-    new static abstract TVector IsNegative(TVector value);
+    static abstract TVector IsPositiveInfinity(TVector value);
 
-    static bool INumberBase<TVector>.IsNegative(TVector value)
-    {
-        return TBoolVector.All(TVector.IsNegativeMask(value));
-    }
+    static abstract TVector IsNegativeInfinity(TVector value);
 
-    new static abstract TVector IsPositive(TVector value);
+    static abstract TVector IsNormal(TVector value);
 
-    static bool INumberBase<TVector>.IsPositive(TVector value)
-    {
-        return TBoolVector.All(TVector.IsPositiveMask(value));
-    }
+    static abstract TVector IsSubnormal(TVector value);
 
-    new static abstract TVector IsZero(TVector value);
+    static abstract TVector IsInteger(TVector value);
 
-    static bool INumberBase<TVector>.IsZero(TVector value)
-    {
-        return TBoolVector.All(TVector.IsZeroMask(value));
-    }
+    static abstract TVector IsEvenInteger(TVector value);
 
-    new static abstract TVector IsPositiveInfinity(TVector value);
-
-    static bool INumberBase<TVector>.IsPositiveInfinity(TVector value)
-    {
-        return TBoolVector.All(TVector.IsPositiveInfinityMask(value));
-    }
-
-    new static abstract TVector IsNegativeInfinity(TVector value);
-
-    static bool INumberBase<TVector>.IsNegativeInfinity(TVector value)
-    {
-        return TBoolVector.All(TVector.IsNegativeInfinityMask(value));
-    }
-
-    new static abstract TVector IsNormal(TVector value);
-
-    static bool INumberBase<TVector>.IsNormal(TVector value)
-    {
-        return TBoolVector.All(TVector.IsNormalMask(value));
-    }
-
-    new static abstract TVector IsSubnormal(TVector value);
-
-    static bool INumberBase<TVector>.IsSubnormal(TVector value)
-    {
-        return TBoolVector.All(TVector.IsSubnormalMask(value));
-    }
-
-    new static abstract TVector IsInteger(TVector value);
-
-    static bool INumberBase<TVector>.IsInteger(TVector value)
-    {
-        return TBoolVector.All(TVector.IsIntegerMask(value));
-    }
-
-    new static abstract TVector IsEvenInteger(TVector value);
-
-    static bool INumberBase<TVector>.IsEvenInteger(TVector value)
-    {
-        return TBoolVector.All(TVector.IsEvenIntegerMask(value));
-    }
-
-    new static abstract TVector IsOddInteger(TVector value);
-
-    static bool INumberBase<TVector>.IsOddInteger(TVector value)
-    {
-        return TBoolVector.All(TVector.IsOddIntegerMask(value));
-    }
+    static abstract TVector IsOddInteger(TVector value);
 #endregion
 
 #region Typed classification (bool-mask returning)
@@ -821,6 +765,11 @@ public interface IVector1<TVector, TScalar> : IVector<TVector, TScalar>,
     {
         return TVector.CreateScalarUnsafe(x);
     }
+
+    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    {
+        return ref v.X;
+    }
 }
 
 public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
@@ -842,6 +791,11 @@ public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
         Unsafe.SkipInit(out TVector value);
         value.X = x;
         return value;
+    }
+
+    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    {
+        return ref v.X;
     }
 }
 
@@ -865,6 +819,11 @@ public interface IVector3<TVector, TScalar> : IVector<TVector, TScalar>,
         value.X = x;
         return value;
     }
+
+    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    {
+        return ref v.X;
+    }
 }
 
 public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
@@ -886,6 +845,11 @@ public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
         Unsafe.SkipInit(out TVector value);
         value.X = x;
         return value;
+    }
+
+    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    {
+        return ref v.X;
     }
 }
 
