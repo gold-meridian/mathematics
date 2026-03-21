@@ -72,6 +72,12 @@ public interface IVector<TVector, TScalar> : IEquatable<TVector>,
     /// </summary>
     static abstract TVector One { get; }
 
+    // TODO: It'd be lovely to give this a default implementation.
+    /// <summary>
+    ///     Gets or sets the element at the specified index.
+    /// </summary>
+    TScalar this[int index] { get; set; }
+
 #region Creation
     /// <summary>
     ///     Broadcast a scalar value to all components.
