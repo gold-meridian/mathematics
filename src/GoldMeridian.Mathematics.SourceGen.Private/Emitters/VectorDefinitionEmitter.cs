@@ -9,7 +9,7 @@ internal static class VectorDefinitionEmitter
 {
     // public static string[] LaneNames => VectorEmitter.LaneNames;
     public static string[] LaneNames { get; } = ["X", "Y", "Z", "W"];
-    
+
     public static void Register(IncrementalGeneratorInitializationContext context)
     {
         context.RegisterPostInitializationOutput(GenerateBaseVectorDefinitions);
@@ -36,10 +36,11 @@ internal static class VectorDefinitionEmitter
 
             w.WriteLine("using System;");
             w.WriteLine("using System.Runtime.InteropServices;");
+            w.WriteLine("using System.Runtime.CompilerServices;");
             w.WriteLine();
             w.WriteLine("namespace GoldMeridian.Mathematics;");
             w.WriteLine();
-            w.WriteLine("[StructLayout(StructLayoutKind.Sequential)]");
+            w.WriteLine("[StructLayout(LayoutKind.Sequential)]");
             w.Write(definitionPart);
 
             for (var i = 0; i < interfaces.Length; i++)
@@ -65,6 +66,7 @@ internal static class VectorDefinitionEmitter
             {
                 w.Indent();
 
+                // Properties
                 for (var i = 0; i < (int)spec.Lanes; i++)
                 {
                     w.WriteLine($"public ref {spec.Scalar.Name} {LaneNames[i]} => {LaneNames[i].ToLower()}");
@@ -72,11 +74,24 @@ internal static class VectorDefinitionEmitter
 
                 w.WriteLine();
 
+                // Fields
                 for (var i = 0; i < (int)spec.Lanes; i++)
                 {
                     w.WriteLine($"private {spec.Scalar.Name} {LaneNames[i].ToLower()};");
                 }
-                
+
+                w.WriteLine();
+
+                // Scalar implicit operator conversions
+                if (spec.Lanes == Lanes.One)
+                {
+                    w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+                    w.WriteLine($"public static implicit operator {spec.Name}({spec.Scalar.Name} value) => new(value);");
+                    w.WriteLine();
+                    w.WriteLine("[MethodImpl(MethodImplOptions.AggressiveInlining)]");
+                    w.WriteLine($"public static implicit operator {spec.Scalar.Name}({spec.Name} value) => value.X;");
+                }
+
                 w.Outdent();
             }
             w.WriteLine("}");

@@ -50,6 +50,8 @@ internal static class VectorConstructorEmitter
         {
             w.WriteLine("namespace GoldMeridian.Mathematics;");
             w.WriteLine();
+            w.WriteLine("using System.Runtime.CompilerServices;");
+            w.WriteLine();
             w.WriteLine($"partial struct {spec.Name}");
             w.WriteLine("{");
             {

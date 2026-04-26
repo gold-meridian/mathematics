@@ -20,9 +20,7 @@ internal readonly record struct VectorSpec(
 
     public bool IsBoolVector => Scalar.IsBool;
 
-    public string BoolVectorName => IsBoolVector
-        ? throw new InvalidOperationException("Bool vectors have no corresponding bool vector.")
-        : Scalar.BoolVectorName((int)Lanes);
+    public string BoolVectorName { get; } = $"bool{(int)Lanes}";
 
     public int StructSizeBytes => (int)Lanes * Scalar.ByteSize;
 
@@ -61,10 +59,6 @@ internal readonly record struct VectorSpec(
 
     public bool EmitDotnetVectorConversions => Scalar.Keyword == "float" && Lanes is not Lanes.One;
 
-    /// <summary>
-    ///     The ordered list of interface declarations this vector struct should
-    ///     implement.  Used by the emitter to build the struct header.
-    /// </summary>
     public IReadOnlyList<string> InterfaceList => BuildInterfaceList();
 
     private static readonly int[] simd_widths = [8, 16, 32, 64];
@@ -74,7 +68,6 @@ internal readonly record struct VectorSpec(
         var list = new List<string>();
         var t = Name;
         var s = Scalar.Keyword;
-        var cap = Scalar.Capabilities;
 
         list.Add($"IEquatable<{t}>");
 
@@ -92,7 +85,7 @@ internal readonly record struct VectorSpec(
         //   IUnsignedIntegerVector  (unsigned integers)
         // These all transitively include INumberVector, ISignedVector, etc.
 
-        if (cap.HasFlag(ScalarCapabilities.IsFloatingPoint))
+        if (Scalar.IsFloatingPoint)
         {
             var bv = BoolVectorName;
 
@@ -110,9 +103,9 @@ internal readonly record struct VectorSpec(
             return list;
         }
 
-        if (cap.HasFlag(ScalarCapabilities.IsBinaryInteger))
+        if (Scalar.IsInteger)
         {
-            if (cap.HasFlag(ScalarCapabilities.IsSigned))
+            if (Scalar.IsSigned)
             {
                 list.Add($"ISignedIntegerVector<{t}, {s}>");
             }

@@ -31,6 +31,8 @@ internal static class VectorSwizzleEmitter
         {
             w.WriteLine("namespace GoldMeridian.Mathematics;");
             w.WriteLine();
+            w.WriteLine("using System.Runtime.CompilerServices;");
+            w.WriteLine();
             w.WriteLine($"partial struct {spec.Name}");
             w.WriteLine("{");
             {
@@ -81,7 +83,7 @@ internal static class VectorSwizzleEmitter
                                     {
                                         w.WriteLine($"{combo[i]} = value.{sourceNames[i]};");
                                     }
-                                    
+
                                     w.Outdent();
                                 }
                                 w.WriteLine("}");
