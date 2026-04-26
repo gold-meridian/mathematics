@@ -11,7 +11,7 @@ namespace GoldMeridian.Mathematics;
  * API surfaces, lifted into generic contracts based on the .NET 7 Generic Math
  * interfaces where possible.
  *
- * Key derivations from INumber<T>:
+ * Key deviations from INumber<T>:
  * - no IComparable<T> (vectors have no total ordering);
  * - comparison operators return TVector (bitmasks),
  *   - use *All/*Any/*None for scalar boolean reductions;
@@ -22,9 +22,7 @@ namespace GoldMeridian.Mathematics;
  * Boolean vectors:
  * - bool1/2/3/4 use packed 8-bit C# booleans;
  * - they are not layout-compatible with standard float/int vectors of the same
- *   dimension due to not being 32-bit booleans (duh), so we can't use
- *   Unsafe.BitCast for zero-cost conversions (we can't use this in general due
- *   to the differences in sizes);
+ *   dimension;
  * - classification methods on IFloatingPointVector take on two forms:
  *   - IsNan(TVector): TVector -> (scalar bitmask, mirrors Vector2/3/4),
  *   - IsNanMask(Vector): TBoolVector -> (component-wise, concrete impl).
@@ -44,11 +42,11 @@ namespace GoldMeridian.Mathematics;
 ///     Base contract for all vector types.  Provides equality, lane count,
 ///     zero/one constants, creation, and span interop.
 /// </summary>
-public interface IVector<TVector, TScalar> : IEquatable<TVector>,
+public unsafe interface IVector<TVector, TScalar> : IEquatable<TVector>,
                                              IEqualityOperators<TVector, TVector, bool>,
                                              IFormattable
-    where TVector : IVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>
+    where TVector : unmanaged, IVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>
 {
     /// <summary>
     ///     The number of components in this vector type.
@@ -108,7 +106,226 @@ public interface IVector<TVector, TScalar> : IEquatable<TVector>,
     static abstract TVector CreateScalarUnsafe(TScalar x);
 #endregion
 
-    static abstract ref TScalar GetReference(in TVector v);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static virtual ref TScalar GetReference(in TVector v)
+    {
+        // This is the preferred way, but we can't force GetReference to be
+        // readonly in this interface:
+        // return ref v.GetReference();
+
+        return ref Unsafe.As<TVector, TScalar>(ref Unsafe.AsRef(in v));
+    }
+
+    ref TScalar GetReference();
+
+#region Extensions
+    /// <summary>
+    ///     Gets the element at <paramref name="index"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    TScalar GetElement(int index)
+    {
+        if ((uint)index >= (uint)TVector.Lanes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return MemoryMarshal.CreateReadOnlySpan(
+            ref GetReference(),
+            TVector.Lanes
+        )[index];
+    }
+
+    /// <summary>
+    ///     Returns a new vector with the element at <paramref name="index"/>
+    ///     replaced by <paramref name="value"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    TVector WithElement(int index, TScalar value)
+    {
+        if ((uint)index >= (uint)TVector.Lanes)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        MemoryMarshal.CreateSpan(ref GetReference(), TVector.Lanes)[index] = value;
+        return (TVector)this;
+    }
+
+    /// <summary>
+    ///     Copies all components into <paramref name="destination"/>.
+    ///     <br />
+    ///     Destination must have at least
+    ///     <see cref="IVector{TVector,TScalar}.Lanes"/> elements.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void CopyTo(Span<TScalar> destination)
+    {
+        if (destination.Length < TVector.Lanes)
+        {
+            throw new ArgumentException("Destination span is too short.");
+        }
+
+        /*
+        MemoryMarshal.CreateReadOnlySpan(
+            ref TVector.GetReference(in vector),
+            TVector.Lanes
+        ).CopyTo(destination);
+        */
+
+        Unsafe.WriteUnaligned(ref Unsafe.As<TScalar, byte>(ref MemoryMarshal.GetReference(destination)), (TVector)this);
+    }
+
+    /// <summary>
+    ///     Attempts to copy all components into <paramref name="destination"/>.
+    ///     <br />
+    ///     Returns <see langword="false"/> if the destination is too short.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    bool TryCopyTo(Span<TScalar> destination)
+    {
+        if (destination.Length < TVector.Lanes)
+        {
+            return false;
+        }
+
+        /*
+        MemoryMarshal.CreateReadOnlySpan(
+            ref TVector.GetReference(in vector),
+            TVector.Lanes
+        ).CopyTo(destination);
+        */
+
+        Unsafe.WriteUnaligned(ref Unsafe.As<TScalar, byte>(ref MemoryMarshal.GetReference(destination)), (TVector)this);
+        return true;
+    }
+
+    /// <summary>
+    ///     Loads a vector from the memory at <paramref name="source"/>.
+    ///     <br />
+    ///     The source need not be aligned.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static virtual TVector Load(TScalar* source)
+    {
+        return TVector.LoadUnsafe(in *source);
+    }
+    
+    /// <summary>
+    ///     Loads a vector from the memory starting at
+    ///     <paramref name="source"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static virtual TVector LoadUnsafe(ref readonly TScalar source)
+    {
+        ref readonly var address = ref Unsafe.As<TScalar, byte>(ref Unsafe.AsRef(in source));
+        return Unsafe.ReadUnaligned<TVector>(in address);
+    }
+    
+    /// <summary>
+    ///     Loads a vector from the memory at <paramref name="source"/> offset
+    ///     by <paramref name="elementOffset"/> elements.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static virtual TVector LoadUnsafe(
+        ref readonly TScalar source,
+        nuint elementOffset
+    )
+    {
+        ref readonly var address = ref Unsafe.As<TScalar, byte>(ref Unsafe.Add(ref Unsafe.AsRef(in source), (nint)elementOffset));
+        return Unsafe.ReadUnaligned<TVector>(in address);
+    }
+    
+    /// <summary>
+    ///     Loads a vector from aligned memory at <paramref name="source"/>.
+    ///     Throws <see cref="AccessViolationException"/> if the pointer is not
+    ///     aligned to <see cref="IVector{TVector,TScalar}.Alignment"/> bytes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static virtual TVector LoadAligned(TScalar* source)
+    {
+        if ((nuint)source % (nuint)TVector.Alignment != 0)
+        {
+            throw new AccessViolationException($"Pointer must be aligned to {TVector.Alignment} bytes.");
+        }
+
+        return *(TVector*)source;
+    }
+
+    static virtual TVector LoadAlignedNonTemporal(TScalar* source)
+    {
+        return TVector.LoadAligned(source);
+    }
+    
+    /// <summary>
+    ///     Stores <paramref name="vector"/> to the memory at
+    ///     <paramref name="destination"/>.  The destination need not be
+    ///     aligned.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void Store(
+        TScalar* destination
+    )
+    {
+        StoreUnsafe(ref *destination);
+    }
+
+    /// <summary>
+    ///     Stores <paramref name="vector"/> to the memory starting at
+    ///     <paramref name="destination"/>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void StoreUnsafe(
+        ref TScalar destination
+    )
+    {
+        ref var address = ref Unsafe.As<TScalar, byte>(ref destination);
+        Unsafe.WriteUnaligned(ref address, (TVector)this);
+    }
+
+    /// <summary>
+    ///     Stores <paramref name="vector"/> to the memory at
+    ///     <paramref name="destination"/> offset by
+    ///     <paramref name="elementOffset"/> elements.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void StoreUnsafe(
+        ref TScalar destination,
+        nuint elementOffset
+    )
+    {
+        destination = ref Unsafe.Add(ref destination, (nint)elementOffset);
+        Unsafe.WriteUnaligned(ref Unsafe.As<TScalar, byte>(ref destination), (TVector)this);
+    }
+
+    /// <summary>
+    ///     Stores the vector to aligned memory at
+    ///     <paramref name="destination"/>.
+    ///     <br />
+    ///     Throws <see cref="AccessViolationException"/> if the pointer is not
+    ///     aligned to <see cref="IVector{TVector,TScalar}.Alignment"/> bytes.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    void StoreAligned(
+        TScalar* destination
+    )
+    {
+        if ((nuint)destination % (nuint)TVector.Alignment != 0)
+        {
+            throw new AccessViolationException($"Pointer must be aligned to {TVector.Alignment} bytes.");
+        }
+
+        *(TVector*)destination = (TVector)this;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void StoreAlignedNonTemporal(
+        TScalar* destination
+    )
+    {
+        StoreAligned(destination);
+    }
+#endregion
 }
 
 /// <summary>
@@ -137,9 +354,13 @@ public interface INumberVector<TVector, TScalar> : IVector<TVector, TScalar>,
                                                    IShiftOperators<TVector, int, TVector>,
                                                    IAdditiveIdentity<TVector, TVector>,
                                                    IMultiplicativeIdentity<TVector, TVector>
-    where TVector : INumberVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>, INumberBase<TScalar>
+    where TVector : unmanaged, INumberVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>, INumberBase<TScalar>
 {
+    static TVector IVector<TVector, TScalar>.Zero => TVector.Create(TScalar.Zero);
+
+    static TVector IVector<TVector, TScalar>.One => TVector.Create(TScalar.One);
+
 #region Identity defaults
     static TVector IAdditiveIdentity<TVector, TVector>.AdditiveIdentity => TVector.Zero;
 
@@ -363,8 +584,8 @@ public interface INumberVector<TVector, TScalar> : IVector<TVector, TScalar>,
 ///     and <see cref="CopySign"/>.
 /// </summary>
 public interface ISignedVector<TVector, TScalar> : INumberVector<TVector, TScalar>
-    where TVector : ISignedVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>, INumberBase<TScalar>, ISignedNumber<TScalar>
+    where TVector : unmanaged, ISignedVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>, INumberBase<TScalar>, ISignedNumber<TScalar>
 {
     /// <summary>
     ///     All components set to negative one.
@@ -384,8 +605,8 @@ public interface ISignedVector<TVector, TScalar> : INumberVector<TVector, TScala
 ///     <see cref="Log2"/>, bit counting, rotation.
 /// </summary>
 public interface IBinaryIntegerVector<TVector, TScalar> : INumberVector<TVector, TScalar>
-    where TVector : IBinaryIntegerVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>, IBinaryInteger<TScalar>
+    where TVector : unmanaged, IBinaryIntegerVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>, IBinaryInteger<TScalar>
 {
     static virtual (TVector Quotient, TVector Remainder) DivRem(TVector left, TVector right)
     {
@@ -413,8 +634,8 @@ public interface IBinaryIntegerVector<TVector, TScalar> : INumberVector<TVector,
 /// </summary>
 public interface ISignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector<TVector, TScalar>,
                                                           ISignedVector<TVector, TScalar>
-    where TVector : ISignedIntegerVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>, IBinaryInteger<TScalar>, ISignedNumber<TScalar>;
+    where TVector : unmanaged, ISignedIntegerVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>, IBinaryInteger<TScalar>, ISignedNumber<TScalar>;
 
 /// <summary>
 ///     Unsigned binary integer vector (<see cref="byte"/>,
@@ -422,8 +643,8 @@ public interface ISignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector<T
 ///     <see cref="UInt128"/>, <see cref="nuint"/>).
 /// </summary>
 public interface IUnsignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector<TVector, TScalar>
-    where TVector : IUnsignedIntegerVector<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>, IBinaryInteger<TScalar>, IUnsignedNumber<TScalar>;
+    where TVector : unmanaged, IUnsignedIntegerVector<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>, IBinaryInteger<TScalar>, IUnsignedNumber<TScalar>;
 
 /// <summary>
 ///     A vector whose scalar is an IEEE 754 floating-point type.
@@ -442,10 +663,12 @@ public interface IUnsignedIntegerVector<TVector, TScalar> : IBinaryIntegerVector
 ///     E.g. for <see cref="float2"/> this is <see cref="bool2"/>.
 /// </typeparam>
 public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVector<TVector, TScalar>
-    where TVector : struct, IFloatingPointVector<TVector, TScalar, TBoolVector>
-    where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
-    where TBoolVector : struct, IBoolVector<TBoolVector>
+    where TVector : unmanaged, IFloatingPointVector<TVector, TScalar, TBoolVector>
+    where TScalar : unmanaged, IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
+    where TBoolVector : unmanaged, IBoolVector<TBoolVector>
 {
+    static TVector ISignedVector<TVector, TScalar>.NegativeOne => TVector.Create(TScalar.NegativeOne);
+
 #region IFloatingPointConstants defaults
     static virtual TVector E
     {
@@ -694,7 +917,7 @@ public interface IFloatingPointVector<TVector, TScalar, TBoolVector> : ISignedVe
 public interface IBoolVector<TVector> : IVector<TVector, bool>,
                                         IBitwiseOperators<TVector, TVector, TVector>,
                                         IUnaryNegationOperators<TVector, TVector> // logical NOT (~)
-    where TVector : IBoolVector<TVector>
+    where TVector : unmanaged, IBoolVector<TVector>
 {
     /// <summary>
     ///     All components true.
@@ -750,8 +973,8 @@ public interface IVectorComponent4<out TVector, TScalar> : IVectorComponent3<TVe
 
 public interface IVector1<TVector, TScalar> : IVector<TVector, TScalar>,
                                               IVectorComponent1<TVector, TScalar>
-    where TVector : IVector1<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>
+    where TVector : unmanaged, IVector1<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 1;
 
@@ -772,16 +995,16 @@ public interface IVector1<TVector, TScalar> : IVector<TVector, TScalar>,
         return TVector.CreateScalarUnsafe(x);
     }
 
-    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    ref TScalar IVector<TVector, TScalar>.GetReference()
     {
-        return ref v.X;
+        return ref X;
     }
 }
 
 public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
                                               IVectorComponent2<TVector, TScalar>
-    where TVector : IVector2<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>
+    where TVector : unmanaged, IVector2<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 2;
 
@@ -799,16 +1022,16 @@ public interface IVector2<TVector, TScalar> : IVector<TVector, TScalar>,
         return value;
     }
 
-    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    ref TScalar IVector<TVector, TScalar>.GetReference()
     {
-        return ref v.X;
+        return ref X;
     }
 }
 
 public interface IVector3<TVector, TScalar> : IVector<TVector, TScalar>,
                                               IVectorComponent3<TVector, TScalar>
-    where TVector : IVector3<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>
+    where TVector : unmanaged, IVector3<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 3;
 
@@ -826,16 +1049,16 @@ public interface IVector3<TVector, TScalar> : IVector<TVector, TScalar>,
         return value;
     }
 
-    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    ref TScalar IVector<TVector, TScalar>.GetReference()
     {
-        return ref v.X;
+        return ref X;
     }
 }
 
 public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
                                               IVectorComponent4<TVector, TScalar>
-    where TVector : IVector4<TVector, TScalar>
-    where TScalar : IEquatable<TScalar>
+    where TVector : unmanaged, IVector4<TVector, TScalar>
+    where TScalar : unmanaged, IEquatable<TScalar>
 {
     static int IVector<TVector, TScalar>.Lanes => 4;
 
@@ -853,20 +1076,32 @@ public interface IVector4<TVector, TScalar> : IVector<TVector, TScalar>,
         return value;
     }
 
-    static ref TScalar IVector<TVector, TScalar>.GetReference(in TVector v)
+    ref TScalar IVector<TVector, TScalar>.GetReference()
     {
-        return ref v.X;
+        return ref X;
     }
 }
+
+/// <summary>
+///     1-component floating-point vector.
+/// </summary>
+/// <typeparam name="TVector"></typeparam>
+/// <typeparam name="TScalar"></typeparam>
+/// <typeparam name="TBoolVector"></typeparam>
+public interface IFloatingPointVector1<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
+                                                                        IVector1<TVector, TScalar>
+    where TVector : unmanaged, IFloatingPointVector1<TVector, TScalar, TBoolVector>
+    where TScalar : unmanaged, IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
+    where TBoolVector : unmanaged, IBoolVector<TBoolVector>;
 
 /// <summary>
 ///     2-component floating-point vector.  Adds 2D <see cref="Cross"/> and
 ///     <see cref="Shuffle"/>.</summary>
 public interface IFloatingPointVector2<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
                                                                         IVector2<TVector, TScalar>
-    where TVector : struct, IFloatingPointVector2<TVector, TScalar, TBoolVector>
-    where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
-    where TBoolVector : struct, IBoolVector<TBoolVector>
+    where TVector : unmanaged, IFloatingPointVector2<TVector, TScalar, TBoolVector>
+    where TScalar : unmanaged, IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
+    where TBoolVector : unmanaged, IBoolVector<TBoolVector>
 {
     /// <summary>
     ///     2D cross product; the Z component of the 3D cross product.
@@ -887,9 +1122,9 @@ public interface IFloatingPointVector2<TVector, TScalar, TBoolVector> : IFloatin
 /// </summary>
 public interface IFloatingPointVector3<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
                                                                         IVector3<TVector, TScalar>
-    where TVector : struct, IFloatingPointVector3<TVector, TScalar, TBoolVector>
-    where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
-    where TBoolVector : struct, IBoolVector<TBoolVector>
+    where TVector : unmanaged, IFloatingPointVector3<TVector, TScalar, TBoolVector>
+    where TScalar : unmanaged, IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
+    where TBoolVector : unmanaged, IBoolVector<TBoolVector>
 {
     /// <summary>
     ///     3D cross product.
@@ -907,9 +1142,9 @@ public interface IFloatingPointVector3<TVector, TScalar, TBoolVector> : IFloatin
 /// </summary>
 public interface IFloatingPointVector4<TVector, TScalar, TBoolVector> : IFloatingPointVector<TVector, TScalar, TBoolVector>,
                                                                         IVector4<TVector, TScalar>
-    where TVector : struct, IFloatingPointVector4<TVector, TScalar, TBoolVector>
-    where TScalar : IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
-    where TBoolVector : struct, IBoolVector<TBoolVector>
+    where TVector : unmanaged, IFloatingPointVector4<TVector, TScalar, TBoolVector>
+    where TScalar : unmanaged, IEquatable<TScalar>, IFloatingPointIeee754<TScalar>
+    where TBoolVector : unmanaged, IBoolVector<TBoolVector>
 {
     /// <summary>
     ///     Shuffle components by index.

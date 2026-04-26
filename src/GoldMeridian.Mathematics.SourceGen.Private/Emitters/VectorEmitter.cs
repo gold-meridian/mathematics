@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿#if FALSE
+using System.Collections.Generic;
 using System.Linq;
 using GoldMeridian.Mathematics.SourceGen.Specs;
 using GoldMeridian.Mathematics.SourceGen.Util;
@@ -17,6 +18,7 @@ internal static class VectorEmitter
 
         w.WriteLine("using System;");
         w.WriteLine("using System.Diagnostics.CodeAnalysis;");
+        w.WriteLine("using System.Globalization;");
         w.WriteLine("using System.Numerics;");
         w.WriteLine("using System.Runtime.CompilerServices;");
         w.WriteLine("using System.Runtime.InteropServices;");
@@ -25,41 +27,25 @@ internal static class VectorEmitter
         w.WriteLine("namespace GoldMeridian.Mathematics;");
         w.WriteLine();
 
-        if (spec.Scalar.SupportsIntrinsics)
-        {
-            var scalarBits = IntrinsicHelpers.ScalarBitSize(spec.Scalar.Keyword);
-            var lanes = spec.Lanes;
-
-            var neededBits = lanes * scalarBits;
-            var vectorWidth = int.MaxValue;
-            foreach (var v in IntrinsicHelpers.IntrinsicSizes)
-            {
-                if (v.Bits >= neededBits && v.Bits < vectorWidth)
-                {
-                    vectorWidth = v.Bits;
-                }
-            }
-
-            var structSizeBytes = vectorWidth / 8;
-
-            w.WriteLine($"[StructLayout(LayoutKind.Sequential, Size = {structSizeBytes})]");
-        }
-
-        w.WriteLine($"public partial struct {spec.Name} : IEquatable<{spec.Name}>");
+        w.WriteLine("[StructLayout(LayoutKind.Sequential)]");
+        
+        var interfaces = string.Join(", ", spec.InterfaceList);
+        w.WriteLine($"public partial struct {spec.Name} : {interfaces}");
         w.WriteLine("{");
         {
             w.Indent();
 
-            EmitPublicProperties(w, spec);
+            EmitConstants(w, spec);
             EmitFields(w, spec);
             EmitIndexer(w, spec);
+            EmitGetReference(w, spec);
             EmitConstructors(w, spec);
             EmitVectorConstructors(w, spec);
             EmitScalarConversions(w, spec);
             EmitDotnetVectorConversions(w, spec);
             EmitIntrinsicConversions(w, spec);
-
             EmitEquatable(w, spec);
+            EmitToString(w, spec);
 
             w.WriteLine("#region Operators", skipIndent: true);
             VectorOperatorsEmitter.Emit(w, spec);
@@ -525,3 +511,4 @@ internal static class VectorEmitter
         w.WriteLine();
     }
 }
+#endif

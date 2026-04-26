@@ -1,4 +1,5 @@
-﻿using System.Linq;
+﻿#if FALSE
+using System.Linq;
 using GoldMeridian.Mathematics.SourceGen.Specs;
 using GoldMeridian.Mathematics.SourceGen.Util;
 
@@ -193,3 +194,4 @@ internal static class VectorOperatorsEmitter
         w.WriteLine();
     }
 }
+#endif

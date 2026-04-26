@@ -10,17 +10,17 @@ internal static class TypeSpecs
     //       (U)Int24.
     public static ScalarSpec[] Scalars { get; } =
     [
-        new("float", "float", IsInteger: false, IsSigned: true, IsFloatingPoint: true, SupportsIntrinsics: true),
-        new("double", "double", IsInteger: false, IsSigned: true, IsFloatingPoint: true, SupportsIntrinsics: true),
-        new("int", "int", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("uint", "uint", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("long", "long", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("ulong", "ulong", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("short", "short", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("ushort", "ushort", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("sbyte", "sbyte", IsInteger: true, IsSigned: true, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("byte", "byte", IsInteger: true, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: true),
-        new("bool", "bool", IsInteger: false, IsSigned: false, IsFloatingPoint: false, SupportsIntrinsics: false),
+        new("float", "float", false, true, true, false, true),
+        new("double", "double", false, true, true, false, true),
+        new("int", "int", true, true, false, false, true),
+        new("uint", "uint", true, false, false, false, true),
+        new("long", "long", true, true, false, false, true),
+        new("ulong", "ulong", true, false, false, false, true),
+        new("short", "short", true, true, false, false, true),
+        new("ushort", "ushort", true, false, false, false, true),
+        new("sbyte", "sbyte", true, true, false, false, true),
+        new("byte", "byte", true, false, false, false, true),
+        new("bool", "bool", false, false, false, true, false),
     ];
 
     public static VectorSpec[] Vectors { get; } = MakeVectors().ToArray();
@@ -33,10 +33,10 @@ internal static class TypeSpecs
         {
             // Including 1-dimensional values is a little awkward but fits with
             // matrices.
-            for (var i = 1; i <= VectorEmitter.MaxLanes; i++)
-            {
-                yield return new VectorSpec(scalar, i);
-            }
+            yield return new VectorSpec(scalar, Lanes.One);
+            yield return new VectorSpec(scalar, Lanes.Two);
+            yield return new VectorSpec(scalar, Lanes.Three);
+            yield return new VectorSpec(scalar, Lanes.Four);
         }
     }
 

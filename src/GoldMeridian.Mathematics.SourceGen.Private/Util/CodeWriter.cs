@@ -45,10 +45,20 @@ public sealed class CodeWriter
     {
         if (!skipIndent && !string.IsNullOrEmpty(line))
         {
-            sb.Append(indentString);
+            WriteIndent();
         }
 
         sb.AppendLine(line);
+    }
+
+    public void WriteIndent()
+    {
+        sb.Append(indentString);
+    }
+
+    public void Write(string text)
+    {
+        sb.Append(text);
     }
 
     public override string ToString()

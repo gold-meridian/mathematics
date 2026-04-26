@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if FALSE
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using GoldMeridian.Mathematics.SourceGen.Specs;
@@ -12,19 +13,18 @@ internal static class SwizzleEmitter
 
     public static void Emit(CodeWriter w, VectorSpec spec)
     {
-        var lanes = spec.Lanes;
+        var lanes = (int)spec.Lanes;
         var scalar = spec.Scalar.Name;
-
-        var laneSubset = LaneNames.Take(lanes).ToArray();
+        var laneNames = LaneNames.Take(lanes).ToArray();
 
         for (var length = 2; length <= Math.Min(4, lanes); length++)
         {
-            foreach (var combination in EnumerateCombinations(laneSubset, length))
+            foreach (var combination in EnumerateCombinations(laneNames, length))
             {
-                var name = string.Concat(combination);
+                var propName = string.Concat(combination);
                 var typeName = $"{scalar}{length}";
 
-                w.WriteLine($"public {typeName} {name}");
+                w.WriteLine($"public {typeName} {propName}");
                 w.WriteLine("{");
                 {
                     w.Indent();
@@ -84,3 +84,4 @@ internal static class SwizzleEmitter
         }
     }
 }
+#endif
