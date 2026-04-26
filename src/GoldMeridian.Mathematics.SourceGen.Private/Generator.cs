@@ -9,7 +9,7 @@ public sealed class Generator : IIncrementalGenerator
     void IIncrementalGenerator.Initialize(IncrementalGeneratorInitializationContext context)
     {
         VectorDefinitionEmitter.Register(context);
-        // VectorConstructorEmitter.Register(context);
+        VectorConstructorEmitter.Register(context);
         VectorSwizzleEmitter.Register(context);
 
         context.RegisterPostInitializationOutput(
